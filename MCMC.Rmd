@@ -1,0 +1,834 @@
+```{r}
+loglik = function(data = NULL,mu1= NULL,mu2= NULL,sigma1= NULL,pi= NULL) {
+  G = 2
+  Wigt = matrix(0, nrow = nrow(data), ncol = G)
+  Wigt[, 1] = dmvnorm(data, mean = mu1, sigma = sigma1)
+  Wigt[, 2] = dmvnorm(data, mean = mu2, sigma = sigma1)
+  
+  Wigt = apply(Wigt, 1, function(z, wigt) {
+    sum(z * wigt)
+  }, wigt = pi) 
+  values = sum(log(Wigt))
+  return(values)
+}
+```
+
+
+```{r}
+loglik2 = function(data = NULL,mu1= NULL,mu2= NULL,sigma1= NULL,pi= NULL) {
+  G = 2
+  Wigt = matrix(0, nrow = nrow(data), ncol = G)
+  Wigt[, 1] = dmvnorm(data, mean = mu1, sigma = sigma1)
+  Wigt[, 2] = dmvnorm(data, mean = mu2, sigma = sigma1)
+  
+  Wigt = apply(Wigt, 1, function(z, wigt) {
+    sum(z * wigt)
+  }, wigt = pi) 
+  values = round(exp(sum(log(Wigt))),70)
+  return(values)
+}
+```
+
+
+
+
+```{r}
+library(MASS)
+GMM <- function(n = NULL, pi = NULL, mu = NULL, sigma = NULL) {
+   G = 2
+   p = 2
+   group = sample(1:G, size = n, replace = TRUE, prob = pi)
+   dat = matrix(0, nrow = n, ncol = p)
+
+   for (g in 1:G) {
+    gmm_list = group == g 
+      ng = sum(gmm_list)
+      if (ng > 0)
+         dat[gmm_list, ] = rmvnorm(ng, mean = mu[g,], sigma = sigma)
+}
+return(dat)}
+
+set.seed(200)
+pi = runif(1)
+mu1 = rnorm(2,mean = 3,sd=2)
+mu2 = rnorm(2,mean = 2,sd=3)
+
+
+sigma11 = rchisq(1,df =1)
+sigma22 = rchisq(1,df =1)
+pho = runif(1,-1,1)
+
+sigma12 = sigma11*pho*sigma22 
+sigma21 = sigma11*pho*sigma22 
+Sigma = matrix(c(sigma11,sigma12,sigma21,sigma22),nrow = 2,ncol = 2)
+#data = GMM(n = 20, pi = c(pi,1-pi), mu = rbind(mu1,mu2), sigma = Sigma)
+data = GMM(n = 50, pi = c(pi,1-pi), mu = rbind(mu1,mu2), sigma = Sigma)
+#mcmc_1 = single.indep.mcmc1(data =head(data,20), n=n0,sigma= c(10,1,1,10), mu1 =c(2,60),  mu2 =c(6,60),pi = c(pi,1-pi))
+```
+
+
+
+```{r}
+mult.random.walk.mcmc1 <- function(data = NULL, n=NULL,sigma= NULL,mu1 =NULL,  mu2 =NULL, pi = NULL,pho = NULL,SD = NULL) {
+  MU1 = matrix(0, nrow=n, ncol=2)
+  MU2 = matrix(0, nrow=n, ncol=2)
+  SIGMA = matrix(0, nrow=n, ncol=4)
+  sigma_1 = matrix(0, nrow=n, ncol=1)
+  sigma_2 = matrix(0, nrow=n, ncol=1)
+  PI = matrix(0, nrow=n, ncol=2)
+  PHO = matrix(0, nrow=n, ncol=1)
+  
+  MU1[1,] = mu1
+  MU2[1,] = mu2
+  SIGMA[1,] = sigma
+  sigma_1[1] = sigma[1]
+  sigma_2[1] = sigma[4]
+  PI[1,] = pi
+  PHO[1] = pho
+  
+   for (i in 2:n){
+  #mu11
+   # if (i%%8 == 0){
+      y11 = rnorm(1,mean = MU1[i-1,1],sd=SD[1])
+      u11 = runif(1)
+      a = exp(loglik(data = data,mu1=c(y11,MU1[i-1,2]),mu2= MU2[i-1,],sigma= matrix(SIGMA[i-1,],nrow = 2, ncol = 2) ,pi=PI[i-1,]))
+      accept11 = a/exp(loglik(data = data,mu1= MU1[i-1,],mu2= MU2[i-1,],sigma=matrix(SIGMA[i-1,],nrow = 2, ncol = 2) ,pi= PI[i-1,]))
+      if (is.nan(accept11))  accept11 = 0
+      if (u11 < accept11 ) MU1[i,1] = y11
+      else MU1[i,1] = MU1[i-1,1]
+   # }
+  #if (i%%8 == 1){
+    #mu12
+      y12 = rnorm(1,mean = MU1[i-1,2],sd=SD[2])
+      u12 = runif(1)
+      accept12 = exp(loglik(data = data,mu1=c(MU1[i-1,1],y12),mu2= MU2[i-1,],sigma= matrix(SIGMA[i-1,],nrow = 2, ncol = 2) ,pi=PI[i-1,]))/exp(loglik(data = data,mu1= MU1[i-1,],mu2= MU2[i-1,],sigma=matrix(SIGMA[i-1,],nrow = 2, ncol = 2) ,pi= PI[i-1,]) )
+      if (is.nan(accept12))  accept12 = 0
+      if (u12 < accept12) MU1[i,2] = y12
+      else MU1[i,2] = MU1[i-1,2]
+   # if (i%%8 == 2){
+     #mu21
+      y21 = rnorm(1,mean = MU2[i-1,1] , sd=SD[3])
+      u21 = runif(1)
+      accept21 = exp(loglik(data = data,mu1= MU1[i-1,], mu2= c(y21,MU2[i-1,2]),sigma= matrix(SIGMA[i-1,],nrow = 2, ncol = 2) ,pi=PI[i-1,]))/exp(loglik(data = data,mu1= MU1[i-1,],mu2= MU2[i-1,],sigma=matrix(SIGMA[i-1,],nrow = 2, ncol = 2) ,pi= PI[i-1,])) 
+      if (is.nan(accept21))  accept21 = 0
+      if (u21 < accept21 ) MU2[i,1] = y21
+      else MU2[i,1] = MU2[i-1,1]
+  #}
+  #if (i%%8 == 3){
+   #mu22
+      y22 = rnorm(1,mean = MU2[i-1,2] , sd=SD[4])
+      u22 = runif(1)
+      accept22 = exp(loglik(data = data,mu1= MU1[i-1,], mu2= c(MU2[i-1,1],y22),sigma= matrix(SIGMA[i-1,],nrow = 2, ncol = 2) ,pi=PI[i-1,]))/exp(loglik(data = data,mu1= MU1[i-1,],mu2= MU2[i-1,],sigma=matrix(SIGMA[i-1,],nrow = 2, ncol = 2) ,pi= PI[i-1,]) )
+      if (is.nan(accept22))  accept22 = 0
+      if (u22 < accept22 )  MU2[i,2] = y22
+      else MU2[i,2] = MU2[i-1,2]
+  #}
+  #}
+   # if (i%%8 ==4){
+     #pi
+      pi = rnorm(1,PI[i-1,1],sd = SD[5])
+      u3 = runif(1)
+      if(pi>1|pi<0){
+        accept3 = 0
+      }
+      else{
+      accept3 = exp(loglik(data = data,mu1= MU1[i-1,], mu2= MU2[i-1,],sigma= matrix(SIGMA[i-1,],nrow = 2, ncol = 2) ,pi=c(pi,1-pi)) )/exp(loglik(data = data,mu1= MU1[i-1,],mu2= MU2[i-1,],sigma= matrix(SIGMA[i-1,],nrow = 2, ncol = 2),pi= PI[i-1,]) )
+      }
+      if (is.nan(accept3))  accept3 = 0
+      if (u3 < accept3 ) PI[i,] =c(pi,1-pi)
+      else PI[i,] = PI[i-1,]
+   # }
+  
+    #if (i%%8 == 5){
+     #SIGMA11
+      sigma11 = rnorm(1,mean = sigma_1[i-1],sd = SD[6]) 
+      u4 = runif(1)
+      if(sigma11<0){accept4 = 0}
+      else{sigma12 = sigma11*PHO[i-1]*sigma_2[i-1] 
+      sigma21 = sigma11*PHO[i-1]*sigma_2[i-1] 
+      sigma_val0 = c(sigma11,sigma12,sigma21,sigma_2[i-1] )
+      accept4 = exp(loglik(data = data,mu1= MU1[i-1,], mu2= MU2[i-1,],sigma= matrix(sigma_val0,nrow = 2, ncol = 2),pi=PI[i-1,]))/exp(loglik(data = data,mu1= MU1[i-1,],mu2= MU2[i-1,],sigma= matrix(SIGMA[i-1,],nrow = 2, ncol = 2),pi= PI[i-1,]) )
+     }
+      if (is.nan(accept4))  accept4 = 0
+      if (u4<accept4) {sigma_1[i] =sigma11    
+            SIGMA[i,] = sigma_val0}
+      else {sigma_1[i] =sigma_1[i-1]    
+             SIGMA[i,] = SIGMA[i-1,]}
+  #}
+  
+    #if (i%%8 == 6){
+      #SIGMA22
+      sigma22 = rnorm(1,mean = sigma_2[i-1],sd = SD[7])  
+      u5 = runif(1)
+      if(sigma22 < 0){accept5 =  0}
+      else{
+      sigma12 = sigma_1[i-1]*PHO[i-1]*sigma22
+      sigma21 = sigma_1[i-1]*PHO[i-1]*sigma22
+      sigma_val = c(sigma_1[i-1],sigma12,sigma21,sigma22)
+      accept5 = exp(loglik(data = data,mu1= MU1[i-1,], mu2= MU2[i-1,],sigma= matrix(sigma_val,nrow = 2, ncol = 2),pi=PI[i-1,]))/exp(loglik(data = data,mu1= MU1[i-1,],mu2= MU2[i-1,],sigma= matrix(SIGMA[i-1,],nrow = 2, ncol = 2),pi= PI[i-1,]) )
+      if (is.nan(accept5))  accept5 = 0
+      if (u5 < accept5) {
+        sigma_2[i] =sigma22
+        SIGMA[i,] =  sigma_val }
+      else { sigma_2[i] =sigma_2[i-1]  
+            SIGMA[i,] = SIGMA[i-1,]}
+      }
+      #}
+      #if (i%%8 == 7){
+        #pho
+        u6 = runif(1)
+        pho = rnorm(1, mean=PHO[i-1] , sd=SD[8])
+        if(pho>1 |pho<(-1)){accept6 = 0}
+        else{
+          sigma12_pho = sigma_1[i-1]*pho*sigma_2[i-1]
+        sigma21_pho= sigma_1[i-1]*pho*sigma_2[i-1]
+        sigma_val2 = c(sigma_1[i-1],sigma12_pho,sigma21_pho,sigma_2[i-1])
+        
+        accept6 = exp(loglik(data = data,mu1= MU1[i-1,], mu2= MU2[i-1,],sigma= matrix(sigma_val2,nrow = 2, ncol = 2) ,pi=PI[i-1,]))/exp(loglik(data=data,mu1=   MU1[i-1,],mu2= MU2[i-1,],sigma= matrix(SIGMA[i-1,],nrow = 2, ncol = 2),pi= PI[i-1,]) )
+        }
+        if (is.nan(accept6))  accept6 = 0
+        if (u6 < accept6 ) PHO[i]=pho
+        else PHO[i] = PHO[i-1]
+ # }
+  }
+    results = list()
+    results$mu1 = MU1
+    results$mu2 = MU2
+    results$pi = PI
+    results$sigma = SIGMA
+    results$sigma_1 = sigma_1
+    results$sigma_2 = sigma_2
+    results$pho = PHO
+    return(results)
+ }
+```
+
+```{r}
+tic()
+n0 = 10^4
+#SD = c(2,2,2,2,1,0.2,1,0.7)
+#SD = c(2,2,2,2,1,0.2,0.2,0.7) #less perfect
+#SD = c(0.1,4,1,2,1,0.2,0.2,0.7) #perfect
+SD = c(0.1,0.4,0.1,.2,.1,0.1,.3,0.7) #best
+#SD = c(1.5,1.5,1.5,1.5,0.1,0.8,0.2,1) 
+#SD = c(5,5,5,5,5,5,5,5) 
+#mcmc_1 = mult.random.walk.mcmc1(data=data, n=n0,sigma= Sigma,mu1=mu1,mu2=mu2,pi=c(0.5,0.5),pho=pho,SD = SD)
+#mcmc_1 = mult.random.walk.mcmc1(data=data, n=n0,sigma= matrix(c(0.083721114,0.005563881,0.005563881,1.340065615), nrow = 2,ncol = 2),mu1=c(3.437273, 4.096108),mu2=c(4.960413,-2.057085),pi = 0.04959259,pho=0.04959258,SD = SD)
+mcmc_1_test = mult.random.walk.mcmc1(data=data, n=n0,sigma= matrix(c(0.083721114,0.005563881,0.005563881,1.340065615), nrow = 2,ncol = 2),mu1=c(-3.437273, -4.096108),mu2=c(4.960413,2.057085),pi = 0.04959259,pho=0.04959258,SD = SD)
+toc()
+```
+
+
+
+```{r}
+#SD = c(0.1,0.4,0.1,.2,.1,0.1,0.1,0.7)
+par(mfrow = c(2,4))
+plot(mcmc_1$mu1[,1],type = "l",main="mu11",ylab="mu11",xlab = "iteration")
+plot(mcmc_1$mu1[,2],type = "l",main="mu12",ylab="mu12",xlab = "iteration")
+plot(mcmc_1$mu2[,1],type = "l",main="mu21",ylab="mu21",xlab = "iteration")
+plot(mcmc_1$mu2[,2],type = "l",main="mu22",ylab="mu22",xlab = "iteration")
+
+
+plot(mcmc_1$pi[,1],type = "l",main="pi",ylab="pi",xlab = "iteration")
+plot(mcmc_1$sigma_1,type = "l",main="sigam11",ylab="sigma11",xlab = "iteration")
+plot(mcmc_1$sigma_2,type = "l",main="sigma22",ylab="sigma22",xlab = "iteration")
+plot(mcmc_1$pho,type = "l",title="pho",ylab="pho",xlab = "iteration")
+```
+```{r}
+#SD = c(0.1,0.4,0.1,.2,.1,0.2,0.2,0.7)
+par(mfrow=c(2,4), mar=3*c(1,1,1,0.1))
+acf(mcmc_1$mu1[,1], main=paste("ACF mcmc - ", LETTERS[1]), lag.max=30)
+acf(mcmc_1$mu1[,2], main=paste("ACF mcmc - ", LETTERS[2]), lag.max=30)
+acf(mcmc_1$mu2[,1], main=paste("ACF mcmc - ", LETTERS[3]), lag.max=30)
+acf(mcmc_1$mu2[,2], main=paste("ACF mcmc - ", LETTERS[4]), lag.max=30)
+
+acf(mcmc_1$pi[,1], main=paste("ACF mcmc - ", LETTERS[5]), lag.max=30)
+acf(mcmc_1$sigma_1, main=paste("ACF mcmc - ", LETTERS[6]), lag.max=30)
+acf(mcmc_1$sigma_2, main=paste("ACF mcmc - ", LETTERS[7]), lag.max=30)
+acf(mcmc_1$pho, main=paste("ACF mcmc - ", LETTERS[8]), lag.max=30)
+```
+
+
+
+```{r}
+#SD = c(0.1,0.4,0.1,.2,.1,0.2,0.5,0.7)
+par(mfrow = c(2,4))
+plot(mcmc_1$mu1[,1],type = "l",main="mu11",ylab="mu11",xlab = "iteration")
+plot(mcmc_1$mu1[,2],type = "l",main="mu12",ylab="mu12",xlab = "iteration")
+plot(mcmc_1$mu2[,1],type = "l",main="mu21",ylab="mu21",xlab = "iteration")
+plot(mcmc_1$mu2[,2],type = "l",main="mu22",ylab="mu22",xlab = "iteration")
+
+
+plot(mcmc_1$pi[,1],type = "l",main="pi",ylab="pi",xlab = "iteration")
+plot(mcmc_1$sigma_1,type = "l",main="sigam11",ylab="sigma11",xlab = "iteration")
+plot(mcmc_1$sigma_2,type = "l",main="sigma22",ylab="sigma22",xlab = "iteration")
+plot(mcmc_1$pho,type = "l",main="pho",ylab="pho",xlab = "iteration")
+```
+
+```{r}
+#SD = 5555655655
+par(mfrow=c(2,4), mar=3*c(1,1,1,0.1))
+acf(mcmc_1$mu1[,1], main=paste("ACF mcmc - ", LETTERS[1]), lag.max=30)
+acf(mcmc_1$mu1[,2], main=paste("ACF mcmc - ", LETTERS[2]), lag.max=30)
+acf(mcmc_1$mu2[,1], main=paste("ACF mcmc - ", LETTERS[3]), lag.max=30)
+acf(mcmc_1$mu2[,2], main=paste("ACF mcmc - ", LETTERS[4]), lag.max=30)
+
+acf(mcmc_1$pi[,1], main=paste("ACF mcmc - ", LETTERS[5]), lag.max=30)
+acf(mcmc_1$sigma_1, main=paste("ACF mcmc - ", LETTERS[6]), lag.max=30)
+acf(mcmc_1$sigma_2, main=paste("ACF mcmc - ", LETTERS[7]), lag.max=30)
+acf(mcmc_1$pho, main=paste("ACF mcmc - ", LETTERS[8]), lag.max=30)
+```
+
+
+```{r}
+#SD = c(0.1,4,1,2,1,0.2,0.2,0.7) #perfect
+par(mfrow = c(2,2))
+plot(mcmc_1$mu1[,1],type = "l",main="mu11",ylab="mu11",xlab = "iteration")
+plot(mcmc_1$mu1[,2],type = "l",main="mu12",ylab="mu12",xlab = "iteration")
+plot(mcmc_1$mu2[,1],type = "l",main="mu21",ylab="mu21",xlab = "iteration")
+plot(mcmc_1$mu2[,2],type = "l",main="mu22",ylab="mu22",xlab = "iteration")
+
+
+plot(mcmc_1$pho,type = "l",main="pho",ylab="pho",xlab = "iteration")
+plot(mcmc_1$pi[,1],type = "l",main="pi",ylab="pi",xlab = "iteration")
+plot(mcmc_1$sigma_1,type = "l",main="sigam11",ylab="sigma22",xlab = "iteration")
+plot(mcmc_1$sigma_2,type = "l",main="sigma22",ylab="sigma22",xlab = "iteration")
+```
+
+```{r}
+tic()
+n0 = 10^4
+#SD = c(2,2,2,2,1,0.2,1,0.7)
+#SD = c(2,2,2,2,1,0.2,0.2,0.7) #less perfect
+#SD = c(0.1,4,1,2,1,0.2,0.2,0.7) #perfect
+#SD = c(0.1,0.4,0.1,.2,.1,0.2,0.25,0.7) #best
+#SD = c(1.5,1.5,1.5,1.5,0.1,0.8,0.2,1) 
+SD = c(6,6,6,6,6,6,6,6) 
+mcmc_1 = mult.random.walk.mcmc1(data=data, n=n0,sigma= c(0.083721114,0.04959258,0.04959258,1.340065615),mu1=c(3.437273, 4.096108),mu2=c(4.960413,-2.057085),pi=c(0.5,0.5),pho=0.04959259,SD = SD)
+
+toc()
+```
+
+
+```{r}
+#SD = c(5,5,5,5,1,1,1,1) 
+par(mfrow = c(2,2))
+plot(mcmc_1$mu1[,1],type = "l",main="mu11",ylab="mu11",xlab = "iteration")
+plot(mcmc_1$mu1[,2],type = "l",main="mu12",ylab="mu12",xlab = "iteration")
+plot(mcmc_1$mu2[,1],type = "l",main="mu21",ylab="mu21",xlab = "iteration")
+plot(mcmc_1$mu2[,2],type = "l",main="mu22",ylab="mu22",xlab = "iteration")
+
+
+
+plot(mcmc_1$pi[,1],type = "l",main="pi",ylab="pi",xlab = "iteration")
+plot(mcmc_1$sigma_1,type = "l",main="sigam11",ylab="sigma11",xlab = "iteration")
+plot(mcmc_1$sigma_2,type = "l",main="sigma22",ylab="sigma22",xlab = "iteration")
+plot(mcmc_1$pho,type = "l",main="pho",ylab="pho",xlab = "iteration")
+```
+
+```{r}
+#SD = c(0.1,0.4,0.1,.2,.1,0.1,0.1,0.7)
+par(mfrow=c(2,2))
+#mcmc = matrix(0, nrow=10^5, ncol=8)
+#mcmc[,1] = mcmc_1$mu1
+acf(mcmc_1$mu1[,1], main=paste("ACF mcmc - ", LETTERS[1]), lag.max=30)
+acf(mcmc_1$mu1[,2], main=paste("ACF mcmc - ", LETTERS[2]), lag.max=30)
+acf(mcmc_1$mu2[,1], main=paste("ACF mcmc - ", LETTERS[3]), lag.max=30)
+acf(mcmc_1$mu2[,2], main=paste("ACF mcmc - ", LETTERS[4]), lag.max=30)
+
+acf(mcmc_1$pi[,1], main=paste("ACF mcmc - ", LETTERS[5]), lag.max=30)
+acf(mcmc_1$sigma_1, main=paste("ACF mcmc - ", LETTERS[6]), lag.max=30)
+acf(mcmc_1$sigma_2, main=paste("ACF mcmc - ", LETTERS[7]), lag.max=30)
+acf(mcmc_1$pho, main=paste("ACF mcmc - ", LETTERS[8]), lag.max=30)
+```
+
+
+
+```{r}
+par(mfrow=c(1,2))
+scale.seq = seq(0,20, length.out = 1000)
+plot(scale.seq, rep(1,length(scale.seq)), col=3, type='l',
+ylab="", xlab="Scale", main="Prior", ylim=c(0,1.01))
+scale.seq = seq(4,20, length.out = 1000)
+plot(scale.seq, dmvnorm(scale.seq, mean = rep(0,mu1) , sigma = Sigma), type='l',
+ylab="", xlab="Scale", main="Posterior" )
+```
+
+
+
+```{r}
+prior.ab = matrix(0, nrow=1, ncol=2)
+prior.ab[1,] = c( 1, 10)
+prior.ab[2,] = c(10, 1)
+prior.ab[3,] = c(-1, 0)
+post.ab = sweep(prior.ab, 2, c(n, sum(x^a0)), "+")
+par(mfrow=
+```
+
+
+
+```{r}
+mcmc_est = matrix(0,ncol = 8,nrow = 1)
+mcmc_est[,1] = mean(mcmc_1$mu1[,1])
+mcmc_est[,2] = mean(mcmc_1$mu1[,2])
+mcmc_est[,3] = mean(mcmc_1$mu2[,1])
+mcmc_est[,4] = mean(mcmc_1$mu2[,2])
+mcmc_est[,5] = mean(mcmc_1$pi[,1])
+mcmc_est[,6] = mean(mcmc_1$sigma_1)
+mcmc_est[,7] = mean(mcmc_1$sigma_2)
+mcmc_est[,8] = mean(mcmc_1$pho)
+
+true_par = matrix(0,ncol = 8,nrow = 1)
+true_par[,1] = 3.42307
+true_par[,2] = 3.99760
+true_par[,3] = 4.974678
+true_par[,4] = -1.905245
+true_par[,5] = 0.5337724
+true_par[,6] = 0.1552814
+true_par[,7] = 1.181857
+true_par[,8] = -0.3854039
+```
+
+```{r}
+tic()
+n0 = 10^4
+iris_sd = c(2,2,2,2,2,.2,0.2,.1)
+mcmc_4 = mult.random.walk.mcmc1(data=iris_data, n=n0,sigma=matrix(c(1,0,0,1),nrow = 2,ncol=2), mu1=c(5,6),mu2=c(3,4),pi=c(0.5,0.5),pho=0.5,SD = iris_sd)
+toc()
+```
+
+
+```{r}
+loglik.ratio <- function(x=NULL, datat=NULL, gam.mle=NULL, q0=NULL) {
+logratio = -2*(loglik(gamma=x, datax=datat) - loglik(gamma=gam.mle, datax=datat) )
+val = logratio - q0
+return(val)
+}
+# optimize(loglik, c(.1, 20), datax=x, maximum = TRUE)
+gamma.hat = mean(data^a0)
+temp2 =uniroot( f= loglik.ratio, interval=c(gamma.hat, 20), datat=x, gam.mle=gamma.hat, q0= 3.841459)
+temp1 =uniroot( f= loglik.ratio, interval=c(.1, gamma.hat), datat=x, gam.mle=gamma.hat, q0= 3.841459)
+likratio.ci = c(temp1$root, temp2$root)
+likratio.ci
+```
+
+
+
+
+
+
+```{r}
+mult.indep.mcmc1 <- function(data = NULL, n=NULL,sigma= NULL,mu1 =NULL,  mu2 =NULL, pi = NULL,pho = NULL,SD = NULL,MEAN = NULL) {
+  MU1 = matrix(0, nrow=n, ncol=2)
+  MU2 = matrix(0, nrow=n, ncol=2)
+  SIGMA = matrix(0, nrow=n, ncol=4)
+  sigma_1 = matrix(0, nrow=n, ncol=1)
+  sigma_2 = matrix(0, nrow=n, ncol=1)
+  PI = matrix(0, nrow=n, ncol=2)
+  PHO = matrix(0, nrow=n, ncol=1)
+  
+  MU1[1,] = mu1
+  MU2[1,] = mu2
+  SIGMA[1,] = sigma
+  sigma_1[1] = sigma[1]
+  sigma_2[1] = sigma[4]
+  PI[1,] = pi
+  PHO[1] = pho
+  
+   for (i in 2:n){
+  #mu11
+   # if (i%%8 == 0){
+      y11 = rnorm(1,mean = 3,sd=SD[1])
+      u11 = runif(1)
+      a = exp(loglik(data = data,mu1=c(y11,MU1[i-1,2]),mu2= MU2[i-1,],sigma= matrix(SIGMA[i-1,],nrow = 2, ncol = 2) ,pi=PI[i-1,]))
+      accept11 = a/exp(loglik(data = data,mu1= MU1[i-1,],mu2= MU2[i-1,],sigma=matrix(SIGMA[i-1,],nrow = 2, ncol = 2) ,pi= PI[i-1,]))
+      if (is.nan(accept11))  accept11 = 0
+      if (u11 < accept11 ) MU1[i,1] = y11
+      else MU1[i,1] = MU1[i-1,1]
+   # }
+  #if (i%%8 == 1){
+    #mu12
+      y12 = rnorm(1,mean = 4,sd=SD[2])
+      u12 = runif(1)
+      accept12 = exp(loglik(data = data,mu1=c(MU1[i-1,1],y12),mu2= MU2[i-1,],sigma= matrix(SIGMA[i-1,],nrow = 2, ncol = 2) ,pi=PI[i-1,]))/exp(loglik(data = data,mu1= MU1[i-1,],mu2= MU2[i-1,],sigma=matrix(SIGMA[i-1,],nrow = 2, ncol = 2) ,pi= PI[i-1,]) )
+      if (is.nan(accept12))  accept12 = 0
+      if (u12 < accept12) MU1[i,2] = y12
+      else MU1[i,2] = MU1[i-1,2]
+   # if (i%%8 == 2){
+     #mu21
+      y21 = rnorm(1,mean = MU2[i-1,1] , sd=SD[3])
+      u21 = runif(1)
+      accept21 = exp(loglik(data = data,mu1= MU1[i-1,], mu2= c(y21,MU2[i-1,2]),sigma= matrix(SIGMA[i-1,],nrow = 2, ncol = 2) ,pi=PI[i-1,]))/exp(loglik(data = data,mu1= MU1[i-1,],mu2= MU2[i-1,],sigma=matrix(SIGMA[i-1,],nrow = 2, ncol = 2) ,pi= PI[i-1,])) 
+      if (is.nan(accept21))  accept21 = 0
+      if (u21 < accept21 ) MU2[i,1] = y21
+      else MU2[i,1] = MU2[i-1,1]
+  #}
+  #if (i%%8 == 3){
+   #mu22
+      y22 = rnorm(1,mean = MU2[i-1,2] , sd=SD[4])
+      u22 = runif(1)
+      accept22 = exp(loglik(data = data,mu1= MU1[i-1,], mu2= c(MU2[i-1,1],y22),sigma= matrix(SIGMA[i-1,],nrow = 2, ncol = 2) ,pi=PI[i-1,]))/exp(loglik(data = data,mu1= MU1[i-1,],mu2= MU2[i-1,],sigma=matrix(SIGMA[i-1,],nrow = 2, ncol = 2) ,pi= PI[i-1,]) )
+      if (is.nan(accept22))  accept22 = 0
+      if (u22 < accept22 )  MU2[i,2] = y22
+      else MU2[i,2] = MU2[i-1,2]
+  #}
+  #}
+   # if (i%%8 ==4){
+     #pi
+      pi = runif(1)
+      u3 = runif(1)
+      if(pi>1|pi<0){
+        accept3 = 0
+      }
+      else{
+      accept3 = exp(loglik(data = data,mu1= MU1[i-1,], mu2= MU2[i-1,],sigma= matrix(SIGMA[i-1,],nrow = 2, ncol = 2) ,pi=c(pi,1-pi)) )/exp(loglik(data = data,mu1= MU1[i-1,],mu2= MU2[i-1,],sigma= matrix(SIGMA[i-1,],nrow = 2, ncol = 2),pi= PI[i-1,]) )
+      }
+      if (is.nan(accept3))  accept3 = 0
+      if (u3 < accept3 ) PI[i,] =c(pi,1-pi)
+      else PI[i,] = PI[i-1,]
+   # }
+  
+    #if (i%%8 == 5){
+     #SIGMA11
+      sigma11 = rnorm(1,mean = sigma_1[i-1],sd = SD[6]) 
+      u4 = runif(1)
+      if(sigma11<0){accept4 = 0}
+      else{sigma12 = sigma11*PHO[i-1]*sigma_2[i-1] 
+      sigma21 = sigma11*PHO[i-1]*sigma_2[i-1] 
+      sigma_val0 = c(sigma11,sigma12,sigma21,sigma_2[i-1] )
+      accept4 = exp(loglik(data = data,mu1= MU1[i-1,], mu2= MU2[i-1,],sigma= matrix(sigma_val0,nrow = 2, ncol = 2),pi=PI[i-1,]))/exp(loglik(data = data,mu1= MU1[i-1,],mu2= MU2[i-1,],sigma= matrix(SIGMA[i-1,],nrow = 2, ncol = 2),pi= PI[i-1,]) )
+     }
+      if (is.nan(accept4))  accept4 = 0
+      if (u4<accept4) {sigma_1[i] =sigma11    
+            SIGMA[i,] = sigma_val0}
+      else {sigma_1[i] =sigma_1[i-1]    
+             SIGMA[i,] = SIGMA[i-1,]}
+  #}
+  
+    #if (i%%8 == 6){
+      #SIGMA22
+      sigma22 = rnorm(1,mean = sigma_2[i-1],sd = SD[7])  
+      u5 = runif(1)
+      if(sigma22 < 0){accept5 =  0}
+      else{
+      sigma12 = sigma_1[i-1]*PHO[i-1]*sigma22
+      sigma21 = sigma_1[i-1]*PHO[i-1]*sigma22
+      sigma_val = c(sigma_1[i-1],sigma12,sigma21,sigma22)
+      accept5 = exp(loglik(data = data,mu1= MU1[i-1,], mu2= MU2[i-1,],sigma= matrix(sigma_val,nrow = 2, ncol = 2),pi=PI[i-1,]))/exp(loglik(data = data,mu1= MU1[i-1,],mu2= MU2[i-1,],sigma= matrix(SIGMA[i-1,],nrow = 2, ncol = 2),pi= PI[i-1,]) )
+      if (is.nan(accept5))  accept5 = 0
+      if (u5 < accept5) {
+        sigma_2[i] =sigma22
+        SIGMA[i,] =  sigma_val }
+      else { sigma_2[i] =sigma_2[i-1]  
+            SIGMA[i,] = SIGMA[i-1,]}
+      }
+      #}
+      #if (i%%8 == 7){
+        #pho
+        u6 = runif(1)
+        pho = rnorm(1, mean=PHO[i-1] , sd=SD[8])
+        if(pho>1 |pho<(-1)){accept6 = 0}
+        else{
+          sigma12_pho = sigma_1[i-1]*pho*sigma_2[i-1]
+        sigma21_pho= sigma_1[i-1]*pho*sigma_2[i-1]
+        sigma_val2 = c(sigma_1[i-1],sigma12_pho,sigma21_pho,sigma_2[i-1])
+        
+        accept6 = exp(loglik(data = data,mu1= MU1[i-1,], mu2= MU2[i-1,],sigma= matrix(sigma_val2,nrow = 2, ncol = 2) ,pi=PI[i-1,]))/exp(loglik(data=data,mu1=   MU1[i-1,],mu2= MU2[i-1,],sigma= matrix(SIGMA[i-1,],nrow = 2, ncol = 2),pi= PI[i-1,]) )
+        }
+        if (is.nan(accept6))  accept6 = 0
+        if (u6 < accept6 ) PHO[i]=pho
+        else PHO[i] = PHO[i-1]
+ # }
+  }
+    results = list()
+    results$mu1 = MU1
+    results$mu2 = MU2
+    results$pi = PI
+    results$sigma = SIGMA
+    results$sigma_1 = sigma_1
+    results$sigma_2 = sigma_2
+    results$pho = PHO
+    return(results)
+ }
+```
+
+
+
+
+```{r}
+sd_list = seq(1,10,length.out = 20)
+iris_sd = c(2,2,2,2,2,2,2,1)
+for (i in length()){
+  if(i<5){
+    try_sd[i] = iris_sd[i]
+    mult.random.walk.mcmc1(data=iris_data, n=n0,sigma=matrix(c(1,0,0,1),nrow = 2,ncol=2), mu1=c(5,6),mu2=c(3,4),pi=c(0.5,0.5),pho=0.5,SD=try_sd)
+  }
+}
+```
+
+
+
+
+
+```{r}
+par(mfrow = c(2,2))
+plot(mcmc_4$mu1[,1],type = "l",main="mu11",ylab="mu11",xlab = "iteration")
+plot(mcmc_4$mu1[,2],type = "l",main="mu12",ylab="mu12",xlab = "iteration")
+plot(mcmc_4$mu2[,1],type = "l",main="mu21",ylab="mu21",xlab = "iteration")
+plot(mcmc_4$mu2[,2],type = "l",main="mu22",ylab="mu22",xlab = "iteration")
+
+
+plot(mcmc_4$pho,type = "l",title="pho",ylab="pho",xlab = "iteration")
+plot(mcmc_4$pi[,1],type = "l",title="pi",ylab="pi",xlab = "iteration")
+plot(mcmc_4$sigma_1,type = "l",title="sigam11",ylab="sigma11",xlab = "iteration")
+plot(mcmc_4$sigma_2,type = "l",title="sigma22",ylab="sigma22",xlab = "iteration")
+```
+
+
+```{r}
+mult.random.walk.mcmc2 <- function(data = NULL, n=NULL,sigma= NULL,mu1 =NULL,  mu2 =NULL, pi = NULL,pho = NULL,SD = NULL) {
+  MU1 = matrix(0, nrow=n, ncol=2)
+  MU2 = matrix(0, nrow=n, ncol=2)
+  SIGMA = matrix(0, nrow=n, ncol=4)
+  sigma_1 = matrix(0, nrow=n, ncol=1)
+  sigma_2 = matrix(0, nrow=n, ncol=1)
+  PI = matrix(0, nrow=n, ncol=2)
+  PHO = matrix(0, nrow=n, ncol=1)
+  
+  MU1[1,] = mu1
+  MU2[1,] = mu2
+  SIGMA[1,] = sigma
+  sigma_1[1] = sigma[1]
+  sigma_2[1] = sigma[4]
+  PI[1,] = pi
+  PHO[1] = pho
+  
+for (i in 2:n){
+  #mu11
+  if (i%%8 == 0 | i%%8 == 7 ){
+      y11 = rnorm(1,mean = MU1[i-1,1],sd=SD[1])
+      u11 = runif(1)
+      accept11 = loglik2(data = data,mu1=c(y11,MU1[i-1,2]),mu2= MU2[i-1,],sigma= matrix(SIGMA[i-1,],nrow = 2, ncol = 2) ,pi=PI[i-1,])/loglik2(data = data,mu1= MU1[i-1,],mu2= MU2[i-1,],sigma=matrix(SIGMA[i-1,],nrow = 2, ncol = 2) ,pi= PI[i-1,])
+      if (is.nan(accept11))  accept11 = 0
+      if (u11 < accept11 ) MU1[i,1] = y11
+      else MU1[i,1] = MU1[i-1,1]
+    }
+  if (i%%8 == 1 |i%%8 == 6){
+      y12 = rnorm(1,mean = MU1[i-1,2],sd=SD[2])
+      u12 = runif(1)
+      accept12 = loglik2(data = data,mu1=c(MU1[i-1,1],y12),mu2= MU2[i-1,],sigma= matrix(SIGMA[i-1,],nrow = 2, ncol = 2) ,pi=PI[i-1,])/loglik2(data = data,mu1= MU1[i-1,],mu2= MU2[i-1,],sigma=matrix(SIGMA[i-1,],nrow = 2, ncol = 2) ,pi= PI[i-1,]) 
+      if (is.nan(accept12))  accept12 = 0
+      if (u12 < accept12) MU1[i,2] = y12
+      else MU1[i,2] = MU1[i-1,2]
+   }
+  if (i%%8 == 2 | i%%8 == 5){
+     #mu21
+    y21 = rnorm(1,mean = MU2[i-1,1] , sd=SD[3])
+    #print(y21)
+    u21 = runif(1)
+    accept21 =loglik2(data = data,mu1= MU1[i-1,], mu2= c(y21,MU2[i-1,2]),sigma= matrix(SIGMA[i-1,],nrow = 2, ncol = 2) ,pi=PI[i-1,])/loglik2(data = data,mu1= MU1[i-1,],mu2= MU2[i-1,],sigma=matrix(SIGMA[i-1,],nrow = 2, ncol = 2) ,pi= PI[i-1,])
+
+    if (is.nan(accept21))  accept21 = 0
+    if (u21 < accept21 ) MU2[i,1] = y21
+    else MU2[i,1] = MU2[i-1,1]
+  }
+  
+if (i%%8 == 3 | i%%8 == 4){
+   #mu22
+    y22 = rnorm(1,mean = MU2[i-1,2] , sd=SD[4])
+    u22 = runif(1)
+    accept22 = loglik2(data = data,mu1= MU1[i-1,], mu2= c(MU2[i-1,1],y22),sigma= matrix(SIGMA[i-1,],nrow = 2, ncol = 2) ,pi=PI[i-1,])/loglik2(data = data,mu1= MU1[i-1,],mu2= MU2[i-1,],sigma=matrix(SIGMA[i-1,],nrow = 2, ncol = 2) ,pi= PI[i-1,]) 
+    if (is.nan(accept22))  accept22 = 0
+    if (u22 < accept22 )  MU2[i,2] = y22
+    else MU2[i,2] = MU2[i-1,2]
+  }
+  #}
+if (i%%8 == 4 | i%%8 == 3){
+    #pi
+    pi = rnorm(1,PI[i-1,1],sd = SD[5])
+    u3 = runif(1)
+    if(pi>1|pi<0){
+      accept3 = 0
+    }
+    else{
+    accept3 = loglik2(data = data,mu1= MU1[i-1,], mu2= MU2[i-1,],sigma= matrix(SIGMA[i-1,],nrow = 2, ncol = 2) ,pi=c(pi,1-pi)) /loglik2(data = data,mu1= MU1[i-1,],mu2= MU2[i-1,],sigma= matrix(SIGMA[i-1,],nrow = 2, ncol = 2),pi= PI[i-1,]) 
+      }
+    if (is.nan(accept3))  accept3 = 0
+    if (u3 < accept3 ) PI[i,] =c(pi,1-pi)
+    else PI[i,] = PI[i-1,]
+    }
+  
+if (i%%8 == 5 | i%%8 == 2){
+    #SIGMA11
+    sigma11 = rnorm(1,mean = sigma_1[i-1],sd = SD[6]) 
+    u4 = runif(1)
+    if(sigma11<0){accept4 = 0}
+    else{sigma12 = sigma11*PHO[i-1]*sigma_2[i-1] 
+    sigma21 = sigma11*PHO[i-1]*sigma_2[i-1] 
+    sigma_val0 = c(sigma11,sigma12,sigma21,sigma_2[i-1] )
+    accept4 = loglik2(data = data,mu1= MU1[i-1,], mu2= MU2[i-1,],sigma= matrix(sigma_val0,nrow = 2, ncol = 2),pi=PI[i-1,])/loglik2(data = data,mu1= MU1[i-1,],mu2= MU2[i-1,],sigma= matrix(SIGMA[i-1,],nrow = 2, ncol = 2),pi= PI[i-1,]) 
+     }
+    if (is.nan(accept4))  accept4 = 0
+    if (u4<accept4) {sigma_1[i] =sigma11    
+            SIGMA[i,] = sigma_val0}
+     else {sigma_1[i] =sigma_1[i-1]    
+             SIGMA[i,] = SIGMA[i-1,]}
+  }
+  
+if (i%%8 == 6 | i%%8 == 1){
+    #SIGMA22
+    sigma22 = rnorm(1,mean = sigma_2[i-1],sd = SD[7])  
+    u5 = runif(1)
+    if(sigma22 < 0){accept5 =  0}
+    else{
+    sigma12 = sigma_1[i-1]*PHO[i-1]*sigma22
+    sigma21 = sigma_1[i-1]*PHO[i-1]*sigma22
+    sigma_val = c(sigma_1[i-1],sigma12,sigma21,sigma22)
+    accept5 = loglik2(data = data,mu1= MU1[i-1,], mu2= MU2[i-1,],sigma= matrix(sigma_val,nrow = 2, ncol = 2),pi=PI[i-1,])/loglik2(data = data,mu1= MU1[i-1,],mu2= MU2[i-1,],sigma= matrix(SIGMA[i-1,],nrow = 2, ncol = 2),pi= PI[i-1,]) 
+    if (is.nan(accept5))  accept5 = 0
+    if (u5 < accept5) {
+       sigma_2[i] =sigma22
+       SIGMA[i,] =  sigma_val }
+    else { sigma_2[i] =sigma_2[i-1]  
+          SIGMA[i,] = SIGMA[i-1,]}
+    }
+    }
+if (i%%8 == 7 | i%%8 == 0){
+      #pho
+      u6 = runif(1)
+      pho = rnorm(1, mean=PHO[i-1] , sd=SD[8])
+      if(pho>1 |pho<(-1)){accept6 = 0}
+      else{
+        sigma12_pho = sigma_1[i-1]*pho*sigma_2[i-1]
+        sigma21_pho= sigma_1[i-1]*pho*sigma_2[i-1]
+        sigma_val2 = c(sigma_1[i-1],sigma12_pho,sigma21_pho,sigma_2[i-1])
+        
+    accept6 = exp(loglik(data = data,mu1= MU1[i-1,], mu2= MU2[i-1,],sigma= matrix(sigma_val2,nrow = 2, ncol = 2) ,pi=PI[i-1,])-loglik2(data=data,mu1=   MU1[i-1,],mu2= MU2[i-1,],sigma= matrix(SIGMA[i-1,],nrow = 2, ncol = 2),pi= PI[i-1,]))
+        }
+      if (is.nan(accept6))  accept6 = 0
+      if (u6 < accept6 ) PHO[i]=pho
+      else PHO[i] = PHO[i-1]
+  }
+  }
+  results = list()
+  results$mu1 = MU1
+  results$mu2 = MU2
+  results$pi = PI
+  results$sigma = SIGMA
+  results$sigma_1 = sigma_1
+  results$sigma_2 = sigma_2
+  results$pho = PHO
+  return(results)
+ }
+```
+
+```{r}
+library(tictoc)
+tic("MCMC2")
+print("10000 iterations for MCMC2......")
+n0 = 10^4
+#SD = c(2,2,2,2,1,0.2,1,0.7)
+SD = c(.2,.2,.2,.2,.1,0.2,0.2,0.1)
+#SD = c(2,2,2,2,1,0.2,0.2,0.7) #perfect
+mcmc_2 = mult.random.walk.mcmc2(data=data, n=n0,sigma= Sigma, mu1=c(4,1),mu2=c(3,4),pi=c(0.01,0.99),pho=0.8,SD = SD)
+toc())
+```
+
+
+
+```{r}
+tic()
+l_seq = seq(.1,.2,length.out = 20)
+k_seq = seq(.2,.5,length.out = 20)
+pi_seq = seq(.1,0.2,length.out = 20)
+sigma1_seq = seq(0.1,0.3,length.out = 20)
+sigma2_seq = seq(0.1,.3,length.out = 20)
+pho_seq = seq(0.5,0.7,length.out = 20)
+
+mu11_list = seq()
+mu12_list = seq()
+mu21_list = seq()
+mu22_list = seq()
+pi_list = seq()
+sigma1_list = seq()
+sigma2_list = seq()
+pho_list = seq()
+
+for (i in 1:20){
+  mcmc_test = mult.random.walk.mcmc1(data=data, n=n0,sigma= matrix(c(0.083721114,0.005563881,0.005563881,1.340065615), nrow = 2,ncol = 2),mu1=c(-3.437273, -4.096108),mu2=c(4.960413,2.057085),pi = 0.04959259,pho=0.04959258,SD = c(l_seq[i],l_seq[i],k_seq[i],k_seq[i],pi_seq[i] ,sigma1_seq[i],sigma2_seq[i],pho_seq[i]))
+  mu11_list[i]=mean(mcmc_test$mu1[,1])
+  mu12_list[i]=mean(mcmc_test$mu1[,2])
+  mu21_list[i]=mean(mcmc_test$mu2[,1])
+  mu22_list[i]=mean(mcmc_test$mu2[,2])
+  
+  pi_list[i]=mean(mcmc_test$pi)
+  sigma1_list[i]=mean(mcmc_test$sigma_1)
+  sigma2_list[i]=mean(mcmc_test$sigma_2)
+  pho_list[i]=mean(mcmc_test$pho)
+  }
+toc()
+```
+```{r}
+round( rbind(1:1,accept.rate=apply(mcmc_1$pho, 2, function(z) { mean(z[-1] != z[-length(z)]) }), average=apply(mcmc_1$pho,2,mean), variance=apply(mcmc_1$pho,2,var),mixing=apply(mcmc_1$pho,2,function(z) { mean(diff(z)^2) })),4)
+```
+
+```{r}
+round(rbind(1:1,accept.rate=apply(mcmc_1$pi, 2, function(z) { mean(z[-1] != z[-length(z)]) }), average=apply(mcmc_1$pi,2,mean), variance=apply(mcmc_1$pi,2,var),mixing=apply(mcmc_1$pi,2,function(z) { mean(diff(z)^2) })),4)
+```
+```{r}
+round(rbind(1:1,accept.rate=apply(mcmc_1$sigma_1, 2, function(z) { mean(z[-1] != z[-length(z)]) }), average=apply(mcmc_1$sigma_1,2,mean), variance=apply(mcmc_1$sigma_1,2,var),mixing=apply(mcmc_1$sigma_1,2,function(z) { mean(diff(z)^2) })),4)
+```
+
+```{r}
+round(rbind(1:1,accept.rate=apply(mcmc_1$sigma_2, 2, function(z) { mean(z[-1] != z[-length(z)]) }), average=apply(mcmc_1$sigma_2,2,mean), variance=apply(mcmc_1$sigma_2,2,var),mixing=apply(mcmc_1$sigma_2,2,function(z) { mean(diff(z)^2) })),apply(mcmc_1$mu1, 2, quantile, probs=c(0.025, 0.975) ) ),4)
+```
+
+```{r}
+round(rbind(1:1,accept.rate=apply(mcmc_1$mu1, 2, function(z) { mean(z[-1] != z[-length(z)]) }), average=apply(mcmc_1$mu1,2,mean), variance=apply(mcmc_1$mu1,2,var),mixing=apply(mcmc_1$mu1,2,function(z) { mean(diff(z)^2) })),4)
+```
+
+
+```{r}
+cbind(round( rbind(1:1, accept=apply(mcmc_1$mu1, 2, function(z) { mean(z[-1] != z[-length(z)]) }),average=apply(mcmc_1$mu1,2,mean), variance=apply(mcmc_1$mu1,2,var), apply(mcmc_1$mu1, 2, quantile, probs=c(0.025, 0.975) ) ), 3),
+
+round( rbind(1:1, accept=apply(mcmc_1$mu2, 2, function(z) { mean(z[-1] != z[-length(z)]) }),average=apply(mcmc_1$mu2,2,mean), variance=apply(mcmc_1$mu2,2,var), apply(mcmc_1$mu2, 2, quantile, probs=c(0.025, 0.975) ) ), 3),
+
+round( rbind(1:1, accept=apply(mcmc_1$pi, 2, function(z) { mean(z[-1] != z[-length(z)]) }),average=apply(mcmc_1$pi,2,mean), variance=apply(mcmc_1$pi,2,var), apply(mcmc_1$pi, 2, quantile, probs=c(0.025, 0.975) ) ), 3),
+
+round( rbind(1:1, accept=apply(mcmc_1$sigma_1, 2, function(z) { mean(z[-1] != z[-length(z)]) }),average=apply(mcmc_1$sigma_1,2,mean), variance=apply(mcmc_1$sigma_1,2,var), apply(mcmc_1$sigma_1, 2, quantile, probs=c(0.025, 0.975) ) ), 3),
+
+
+round( rbind(1:1, accept=apply(mcmc_1$sigma_2, 2, function(z) { mean(z[-1] != z[-length(z)]) }),average=apply(mcmc_1$sigma_2,2,mean), variance=apply(mcmc_1$sigma_2,2,var) , apply(mcmc_1$sigma_2, 2, quantile, probs=c(0.025, 0.975) ) ), 3),
+
+
+round( rbind(1:1, accept=apply(mcmc_1$pho, 2, function(z) { mean(z[-1] != z[-length(z)]) }),average=apply(mcmc_1$pho,2,mean), variance=apply(mcmc_1$pho,2,var) , apply(mcmc_1$pho, 2, quantile, probs=c(0.025, 0.975) ) ), 3)
+
+)
+
+
+
+```
+
+
+```{r}
+
+par(mfrow=c(2,4), mar=3*c(1,1,1,0.1))
+hist( mcmc_1$mu1[,1], main="m11", breaks=100,probability = TRUE)
+lines(density(mcmc_1$mu1[,1]),col="red")  
+hist( mcmc_1$mu1[,2], main="m12", breaks=100,probability = TRUE)
+lines(density(mcmc_1$mu1[,2]),col="red")  
+hist( mcmc_1$mu2[,1], main="m21", breaks=100,probability = TRUE)
+lines(density(mcmc_1$mu2[,1]),col="red")  
+hist( mcmc_1$mu2[,2], main="mu22", breaks=100,probability = TRUE)
+lines(density(mcmc_1$mu2[,2]),col="red")  
+hist( mcmc_1$pi, main="pi", breaks=100,probability = TRUE)
+lines(density(mcmc_1$pi),col="red")  
+hist( mcmc_1$sigma_1, main="sigma1", breaks=100,probability = TRUE)
+lines(density(mcmc_1$sigma_1),col="red")  
+hist( mcmc_1$sigma_2, main="sigma2", breaks=100,probability = TRUE)
+lines(density(mcmc_1$sigma_2),col="red") 
+hist( mcmc_1$pho, main="rho", breaks=100,probability = TRUE)
+lines(density(mcmc_1$pho),col="red") 
+
+```
+

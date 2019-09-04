@@ -1,0 +1,401 @@
+
+
+```{r}
+library(mvtnorm)
+loglik_em = function(data = NULL, par = NULL) {
+  G = length(par$pi)
+  Wigt = matrix(0, nrow = nrow(data), ncol = G)
+  for (i in 1:G) Wigt[, i] = dmvnorm(data, mean = par[[i]]$mu, sigma = par[[i]]$sigma)
+  Wigt = apply(Wigt, 1, function(z, wigt) {
+    sum(z * wigt)
+  }, wigt = par$pi) 
+  values = sum(log(Wigt)) 
+  return(values)
+}
+```
+
+
+  
+```{r}
+estep <- function(data = NULL, par = NULL) { 
+  G = length(par$pi)
+  if (G > 1) {
+      logli = matrix(0, nrow = nrow(data), ncol = length(par$pi))
+      for (k in 1:G) logli[, k] = dmvnorm(data, mean = par[[k]]$mu, sigma = par[[k]]$sigma,log = FALSE)
+      w = t(apply(logli, 1, function(z, wt) {
+      x = z * wt/sum(z * wt)
+      return(x)
+        }, wt = par$pi))
+      } else w = matrix(1, nrow = nrow(data), ncol = G)
+  return(w)}
+```
+
+
+
+```{r}
+mstep <- function(data = NULL, wigt = NULL) { 
+  G = ncol(wigt)
+  par = list() 
+  n = nrow(data)
+  store = 0 
+  
+  for (k in 1:G) {
+    par[[k]] = list()
+    res = cov.wt(data, wt = wigt[, k], method = "ML")
+    par[[k]]$mu = res$center
+    t = res$cov
+    store = store + t*sum(wigt[, k])
+    }
+  for(i in 1:G)
+    {par[[i]]$sigma = store/n}
+  
+  par$pi = apply(wigt,2,mean)
+  return(par) 
+}
+```
+
+
+
+
+```{r}
+
+EM <- function(data = NULL, par0 = NULL, G = 2, n = 10) {
+val = list()
+if (is.null(par0))
+val$par = ipar(data = data, g = G, covtype = covtype) else val$par = par0
+val$loglik = numeric(n)
+for (i in 1:n) {
+tempw = estep(data = data, par = val$par)
+val$par = mstep(data = data, w = tempw)
+val$loglik[i] = loglik_em(data = data, par = val$par)
+}
+return(val)
+}
+```
+
+
+```{r}
+MAP <- function(data, par) {
+w = estep(data = data, par = par)
+z = apply(w, 1, function(z) {
+z = (1:length(z))[z == max(z)]
+return(z[1])
+})
+z = as.numeric(z)
+return(z)library(mvtnorm)
+}
+```
+
+```{r}
+set.seed(200)
+par1 = list()
+par1[[1]] = list()
+par1[[1]]$mu = c(3,4)
+par1[[1]]$sigma = matrix(c(1,0,0,0,1,0,0,0,1),nrow = 2,ncol = 2)
+par1[[2]] = list()
+par1[[2]]$mu = c(2,3)
+par1[[2]]$sigma = matrix(c(1,0,0,0,1,0,0,0,1),nrow = 2,ncol = 2)
+par1[[3]] = list()
+par1[[3]]$mu = c(2,3)
+par1[[3]]$sigma = matrix(c(1,0,0,0,1,0,0,0,1),nrow = 2,ncol = 2)
+par1$pi = c(0.5,0.2,0.3)
+kk = EM(data = iris[,1:2], par0 = par1, G = 3, n = 100)
+```
+
+
+```{r}
+library(mvtnorm)
+set.seed(200)
+par0 = list()
+par0[[1]] = list()
+par0[[1]]$mu = c(3,4)
+par0[[1]]$sigma = matrix(c(1,0,0,1),nrow = 2,ncol = 2)
+par0[[2]] = list()
+par0[[2]]$mu = c(2,3)
+par0[[2]]$sigma = matrix(c(1,0,0,1),nrow = 2,ncol = 2)
+par0$pi = c(0.5, 0.5)
+results_em = EM(data = data, par0 = par0, G = 2, n = 100)
+results_em$par
+```
+
+
+```{r}
+plot(results_em$loglik,type="l",ylab = "log-likelihood")
+```
+
+```{r}
+dfnorm <- function(data = NULL,par = NULL) {
+  G = length(pi)
+  W = matrix(0, nrow = nrow(data), ncol = G)
+  for (i in 1:G) W[, i] = dmvnorm(data, mean = par[[i]]$mu, sigma = par[[i]]$sigma)
+  W = apply(W, 1, function(z, wt) { sum(z * wt)
+}, wt = par$pi) 
+  return(log(W))
+}
+```
+
+
+```{r}
+x1 = seq(min(data[,1]), max(data[,1]), length.out = 200)
+x2 = seq(min(data[,2]), max(data[,2]), length.out = 200)
+mt = matrix(0, nrow = length(x1), ncol = length(x2))
+
+for (i in 1:length(x1)) {
+  mm  = cbind(x1[i], x2)
+  pi =results_em$par$pi
+  par = results_em$par
+  mt[i, ] = dfnorm(mm, par=par)
+  }
+  contour(x1, x2, mt, nlevels = 100, ylab = "x2",xlab="x1") 
+  points(data,pch = 20)
+```
+```{r}
+rgpar <- function(data = NULL, g = NULL) {
+w = matrix(rexp(nrow(data)*g), nrow = nrow(data), ncol = g)
+w = matrix(t(apply(w, 1, function(z) {
+z/sum(z)
+})), nrow = nrow(data), ncol = g)
+par = mstep(data = data, w = w)
+return(par)
+}
+```
+
+```{r}
+set.seed(200)
+z = numeric(100)
+tz = list()
+te = list()
+for (i in 1:length(z)) {
+tz[[i]] =rgpar(data, g = 2)
+te[[i]] = EM(data = data,  G = 2, n = 100,par0 = tz[[i]])
+z[i] = max(te[[i]]$loglik)
+}
+te[[1]]$par
+```
+
+
+
+```{r}
+par(mfrow = c(1, 2))
+plot(z, type = "l", xlab = "100 starting values",ylab = "logliklihood")
+x1 = seq(min(data[,1]), max(data[,1]), length.out = 101)
+x2 = seq(min(data[,2]), max(data[,2]), length.out = 100)
+mt = matrix(0, nrow = length(x1), ncol = length(x2))
+zz = matrix(0, nrow = length(x1), ncol = length(x2))
+for (i in 1:length(x1)) zz[i, ] = dfnorm(cbind(x1[i], x2), par = te[[2]]$par)
+contour(x1, x2, zz, nlevels = 50)
+points(data, pch = 20, col = MAP(data, par = te[[2]]$par) + 2)
+```
+
+
+
+
+```{r}
+EMn2 <- function(data = NULL, par0 = NULL, G = 2, n = 10, m = 2) {
+gpar0 = par0
+val = list()
+if (is.null(gpar0))
+val$gpar = igpar(data = data, g = G, covtype = covtype) else val$gpar = gpar0
+val$loglik = numeric(n)
+# Initialize the weight matrix
+tempw = estep(data = data, par = val$gpar)
+for (i in 1:n) {
+sub1 = sample(nrow(data), m)
+tempw[sub1, ] = estep(data = data[sub1, ], par = val$gpar)
+val$gpar = mstep(data = data, w = tempw)
+val$loglik[i] = loglik_em(data = data, par = val$gpar)
+}
+return(val)
+}
+```
+
+
+
+```{r}
+temp21 = EMn2(data = data, par0 = par0, G = 2, n = 100, m = 5)
+temp22 = EMn2(data = data, par0 = par0, G = 2, n = 100, m = 10)
+temp23 = EMn2(data = data, par0 = par0, G = 2, n = 100, m = 15)
+temp24 = EMn2(data = data, par0 = par0, G = 2, n = 100, m = 20)
+plot(temp21$loglik, type = "l",ylab = "loglikelihood",col="red",xlab = "Iteration",main = "Standard EM and Incremental EM for Various m ")
+lines(results_em$loglik, type = "l",ylab = "loglikelihood",col="black")
+lines(temp22$loglik, type = "l",ylab = "loglikelihood",col="blue")
+lines(temp23$loglik, type = "l",ylab = "loglikelihood",col="green")
+lines(temp24$loglik, type = "l",ylab = "loglikelihood",col="purple")
+legend("topright", 
+  legend = c("Standard EM","m = 20", "m = 15","m = 10","m = 5"), 
+  col = c("black","purple","green","blue","red"), 
+  pch = c("-","-","-","-","-"), 
+  bty = "n", 
+  text.col = "black", 
+  horiz = F , 
+  inset = c(0.1, 0.1))
+
+```
+
+```{r}
+par(mfrow = c(1, 2))
+x1 = seq(min(data[,1]), max(data[,1]), length.out = 101)
+x2 = seq(min(data[,2]), max(data[,2]), length.out = 100)
+mt2_em2 = matrix(0, nrow = length(x1), ncol = length(x2))
+
+for (i in 1:length(x1)) {
+  mm  = cbind(x1[i], x2)
+  pi =temp22$gpar$pi
+  par = temp22$gpar
+  mt2_em2[i, ] = dfnorm(mm, par=par)
+  }
+#contour(x1, x2, mt2_em2, nlevels = 50, ylab = "x2",xlab="x1") 
+#points(data,pch = 20,col = MAP(data, par = temp22$gpar) + 2)
+
+z2 = numeric(100)
+tz2 = list()
+te2 = list()
+for (i in 1:length(z2)) {
+tz2[[i]] =rgpar(data, g = 2)
+te2[[i]] = EMn2(data = data,  G = 2, n = 100,par0 = tz2[[i]],m=20)
+z2[i] = max(te2[[i]]$loglik)
+}
+```
+
+
+```{r}
+#te2[[1]]$gpar
+par(mfrow = c(1, 2))
+plot(z2, type = "l",ylab = "loglikelihood",xlab = "100 different starting values")
+zz2 = matrix(0, nrow = length(x1), ncol = length(x2))
+for (i in 1:length(x1)) zz2[i, ] = dfnorm(cbind(x1[i], x2), par = te2[[which.max(z2)]]$gpar)
+#contour(x1, x2, zz, nlevels = 50)
+points(data, pch = 20)
+contour(x1, x2, zz2, nlevels = 50)
+points(data, pch = 20, col = MAP(data, par = te2[[which.max(z2)]]$gpar) + 2)
+```
+
+```{r}
+set.seed(200)
+tic()
+test1 = EMn2(data = data,  G = 2, n = 100,par0 = par0,m=5)
+toc()
+
+tic()
+test1 = EMn2(data = data,  G = 2, n = 100,par0 = par0,m=10)
+toc()
+
+
+tic()
+test1 = EMn2(data = data,  G = 2, n = 100,par0 = par0,m=15)
+toc()
+
+tic()
+test1 = EMn2(data = data,  G = 2, n = 100,par0 = par0,m=20)
+toc()
+
+```
+
+
+```{r}
+tic()
+test2 = EM(data = data,  G = 2, n = 100,par0 = par0)
+toc()
+
+```
+
+```{r}
+EMn3 <- function(data = NULL, par0 = NULL, G = 2, n = 10) {
+  gpar0 = par0
+  val = list()
+  if (is.null(gpar0))
+    val$gpar = igpar(data = data, g = G, covtype = covtype) 
+  else val$gpar = gpar0
+  val$loglik = numeric(n)
+  tempw = estep(data = data, par = val$gpar)
+  for (i in 1:n) {
+    tempw = estep(data = data, par = val$gpar)
+    genz = apply(tempw, 1, function(z) {
+    sample(z, size = 1, prob = z)})
+    tempw = sweep(tempw, 1, genz, "==")
+    val$gpar = mstep(data = data, w = tempw)
+    val$loglik[i] = loglik_em(data = data, par = val$gpar)
+}
+    return(val)
+}
+```
+
+
+```{r}
+plot.new()
+for (seed in c(2,45,-2,5,8,2,10)){
+set.seed(200)
+par(mfrow = c(1, 2))
+temp3 = EMn3(data =data, par0 = par0, G = 2, n = 100)
+lines(temp3$loglik, type = "l",main="logliklihood")
+}
+
+
+x1 = seq(min(data[,1]), max(data[,1]), length.out = 200)
+x2 = seq(min(data[,2]), max(data[,2]), length.out = 200)
+mt3 = matrix(0, nrow = length(x1), ncol = length(x2))
+
+for (i in 1:length(x1)) {
+  mm  = cbind(x1[i], x2)
+  pi =temp3$gpar$pi
+  par = temp3$gpar
+  mt3[i, ] = dfnorm(mm, par=par)
+  }
+contour(x1, x2, mt3, nlevels = 100, ylab = "x2",xlab="x1") 
+points(data,pch = 20)
+
+```
+```{r}
+
+par(mfrow = c(1, 2))
+x1 = seq(min(data[,1]), max(data[,1]), length.out = 101)
+x2 = seq(min(data[,2]), max(data[,2]), length.out = 100)
+mt2_em2 = matrix(0, nrow = length(x1), ncol = length(x2))
+
+for (i in 1:length(x1)) {
+  mm  = cbind(x1[i], x2)
+  pi =temp22$gpar$pi
+  par = temp22$gpar
+  mt2_em2[i, ] = dfnorm(mm, par=par)
+  }
+#contour(x1, x2, mt2_em2, nlevels = 50, ylab = "x2",xlab="x1") 
+#points(data,pch = 20,col = MAP(data, par = temp22$gpar) + 2)
+
+z3 = numeric(100)
+tz3 = list()
+te3 = list()
+for (i in 1:length(z3)) {
+tz3[[i]] =rgpar(data, g = 2)
+te3[[i]] = EMn3(data = data,  G = 2, n = 100,par0 = tz3[[i]])
+z3[i] = max(te3[[i]]$loglik)
+}
+```
+```{r}
+par(mfrow = c(1, 1))
+plot(results_em$loglik, type = "l",main="Various EMs Comparison",ylab="logliklihood",xlab="iterations")
+lines(temp21$loglik, type = "l",col="blue")
+#lines(temp22$loglik, type = "l",main="logliklihood")
+lines(temp3$loglik, type = "l",col="red")
+legend("topright", 
+  legend = c("Standard EM","Incremental EM", "Stochastic EM"), 
+  col = c("black","blue","red"), 
+  pch = c("-","-","-"), 
+  bty = "n", 
+  text.col = "black", 
+  horiz = F , 
+  inset = c(0.1, 0.1))
+
+```
+```{r}
+par(mfrow = c(1, 1))
+set.seed(-10000)
+temp3 = EMn3(data =data, par0 = par0, G = 2, n = 100)
+plot(temp3$loglik, type = "l",main = "Stochatic EM under 20 random seeds",ylab="logliklihood",col = "red", ylim=c(-155,-120),xlab = "iterations",xlim=c(0,40))
+for (seed in c(2,45,-2,5,8,2,10,2,11111,222,300,0,-4,6,00,-9999999,912,32)){
+set.seed(seed)
+temp3 = EMn3(data =data, par0 = par0, G = 2, n = 100)
+lines(temp3$loglik, type = "l",main="logliklihood",col = "red")
+}
+
+```
+
